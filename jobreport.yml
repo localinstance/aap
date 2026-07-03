@@ -5,6 +5,7 @@
   gather_facts: false
   vars:
     controller_host: "https://192.168.56.10"
+    api_prefix: "/api/controller/v2"
     controller_user: "admin"
     controller_password: "{{ vault_controller_password }}"
     target_org_name: "infra"
@@ -13,7 +14,7 @@
   tasks:
     - name: Look up the organization ID for "{{ target_org_name }}"
       ansible.builtin.uri:
-        url: "{{ controller_host }}/api/v2/organizations/?name={{ target_org_name }}"
+        url: "{{ controller_host }}{{ api_prefix }}/organizations/?name={{ target_org_name }}"
         method: GET
         user: "{{ controller_user }}"
         password: "{{ controller_password }}"
@@ -33,7 +34,7 @@
 
     - name: Get job results for the organization
       ansible.builtin.uri:
-        url: "{{ controller_host }}/api/v2/jobs/?organization={{ org_id }}&order_by=-finished"
+        url: "{{ controller_host }}{{ api_prefix }}/jobs/?organization={{ org_id }}&order_by=-finished"
         method: GET
         user: "{{ controller_user }}"
         password: "{{ controller_password }}"
