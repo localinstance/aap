@@ -52,8 +52,3 @@
       loop: "{{ job_results.json.results }}"
       loop_control:
         label: "{{ item.id }}"
-
-    - name: Save full results to a local file
-      ansible.builtin.copy:
-        content: "{{ job_results.json | to_nice_json }}"
-        dest: "./job_results_{{ target_org_name }}.json"
