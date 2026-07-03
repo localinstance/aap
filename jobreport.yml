@@ -1,2 +1,60 @@
 ---
+- name: Get job results for a specific organization
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    controller_host: "https://192.168.56.10/"
+    controller_user: "admin"
+    controller_password: "{{ vault_controller_password }}"
+    target_org_name: "infra"
+    validate_certs: false   # set true in production with proper CA certs
+
+  tasks:
+    - name: Look up the organization ID for "{{ target_org_name }}"
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/v2/organizations/?name={{ target_org_name }}"
+        method: GET
+        user: "{{ controller_user }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs }}"
+        return_content: true
+      register: org_lookup
+
+    - name: Fail if organization not found
+      ansible.builtin.fail:
+        msg: "Organization '{{ target_org_name }}' not found"
+      when: org_lookup.json.count == 0
+
+    - name: Set organization ID fact
+      ansible.builtin.set_fact:
+        org_id: "{{ org_lookup.json.results[0].id }}"
+
+    - name: Get job results for the organization
+      ansible.builtin.uri:
+        url: "{{ controller_host }}/api/v2/jobs/?organization={{ org_id }}&order_by=-finished"
+        method: GET
+        user: "{{ controller_user }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs }}"
+        return_content: true
+      register: job_results
+
+    - name: Display job results summary
+      ansible.builtin.debug:
+        msg: >-
+          Job {{ item.id }} - "{{ item.name }}"
+          | status: {{ item.status }}
+          | started: {{ item.started }}
+          | finished: {{ item.finished }}
+      loop: "{{ job_results.json.results }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Save full results to a local file
+      ansible.builtin.copy:
+        content: "{{ job_results.json | to_nice_json }}"
+        dest: "./job_results_{{ target_org_name }}.json"---
 hosts: all
