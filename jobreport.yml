@@ -8,7 +8,7 @@
     api_prefix: "/api/controller/v2"
     controller_user: "admin"
     controller_password: "{{ vault_controller_password }}"
-    target_org_name: "infra"
+    target_org_name: "intra"
     validate_certs: false
 
   tasks:
