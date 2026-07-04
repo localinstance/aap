@@ -1,0 +1,75 @@
+---
+- name: Get job results for a specific organization and export as CSV
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    controller_host: "https://192.168.56.10"
+    api_prefix: "/api/controller/v2"
+    controller_user: "admin"
+    controller_password: "{{ vault_controller_password }}"
+    target_org_name: "intra"
+    validate_certs: false
+    output_csv: "./job_results_{{ target_org_name }}.csv"
+
+  tasks:
+    - name: Look up the organization ID for "{{ target_org_name }}"
+      ansible.builtin.uri:
+        url: "{{ controller_host }}{{ api_prefix }}/organizations/?name={{ target_org_name }}"
+        method: GET
+        user: "{{ controller_user }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs }}"
+        return_content: true
+      register: org_lookup
+
+    - name: Fail if organization not found
+      ansible.builtin.fail:
+        msg: "Organization '{{ target_org_name }}' not found"
+      when: org_lookup.json.count == 0
+
+    - name: Set organization ID fact
+      ansible.builtin.set_fact:
+        org_id: "{{ org_lookup.json.results[0].id }}"
+
+    - name: Get job results for the organization
+      ansible.builtin.uri:
+        url: "{{ controller_host }}{{ api_prefix }}/jobs/?organization={{ org_id }}&order_by=-finished"
+        method: GET
+        user: "{{ controller_user }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs }}"
+        return_content: true
+      register: job_results
+
+    - name: Build CSV content
+      ansible.builtin.set_fact:
+        csv_lines: >-
+          {{
+            ['id,name,status,job_type,started,finished,elapsed,launched_by']
+            +
+            job_results.json.results | map('community.general.dict_kv', 'row') | list
+          }}
+      when: false   # placeholder, replaced by the loop-based approach below
+
+    - name: Build CSV rows manually
+      ansible.builtin.set_fact:
+        csv_rows: "{{ csv_rows | default(['id,name,status,job_type,started,finished,elapsed,launched_by']) + [row] }}"
+      loop: "{{ job_results.json.results }}"
+      loop_control:
+        loop_var: item
+        label: "{{ item.id }}"
+      vars:
+        row: >-
+          {{ item.id }},"{{ item.name | replace('"', '""') }}",{{ item.status }},{{ item.job_type }},{{ item.started | default('') }},{{ item.finished | default('') }},{{ item.elapsed | default('') }},"{{ item.launched_by.name | default('') }}"
+
+    - name: Write CSV file
+      ansible.builtin.copy:
+        content: "{{ csv_rows | join('\n') }}\n"
+        dest: "{{ output_csv }}"
+
+    - name: Confirm file written
+      ansible.builtin.debug:
+        msg: "CSV written to {{ output_csv }} with {{ job_results.json.results | length }} job(s)."
